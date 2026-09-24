@@ -1,5 +1,5 @@
 {
-  "name": "git-broom",
+  "name": "@sachin-dev/git-broom",
   "version": "1.0.0",
   "description": "Production-ready CLI to safely untrack Git files, update .gitignore, and optionally purge history.",
   "type": "module",

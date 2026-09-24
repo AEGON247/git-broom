@@ -2,7 +2,7 @@
 
 > Production-ready CLI to safely untrack Git files, update `.gitignore`, and optionally purge sensitive leaks from commit history.
 
-[![npm version](https://img.shields.io/npm/v/git-broom.svg)](https://www.npmjs.com/package/git-broom)
+[![npm version](https://img.shields.io/npm/v/@sachin-dev/git-broom.svg)](https://www.npmjs.com/package/@sachin-dev/git-broom)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-green.svg)](https://nodejs.org/)
 
@@ -24,7 +24,7 @@ Fixing it normally requires multiple error-prone steps:
 Install globally:
 
 ```bash
-npm install -g git-broom
+npm install -g @sachin-dev/git-broom
 ```
 
 Because of Git's plugin architecture, you can now run it either directly or as a native Git subcommand:
@@ -37,7 +37,7 @@ git broom .env
 git-broom .env
 
 # Or execute on demand with npx
-npx git-broom .env
+npx @sachin-dev/git-broom .env
 ```
 
 ---
