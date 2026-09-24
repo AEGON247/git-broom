@@ -226,9 +226,3 @@ export async function runCli(argv = process.argv): Promise<void> {
     process.exit(1);
   }
 }
-
-// Automatically invoke if executed directly as a script
-runCli().catch((err) => {
-  console.error(pc.red(`Unexpected fatal error: ${err.message}`));
-  process.exit(1);
-});
