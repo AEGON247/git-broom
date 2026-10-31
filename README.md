@@ -5,6 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/@sachin-dev/git-broom.svg)](https://www.npmjs.com/package/@sachin-dev/git-broom)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-green.svg)](https://nodejs.org/)
+![NPM](https://img.shields.io/npm/dt/@sachin-dev/git-broom)
 
 Have you ever accidentally committed a `.env`, API credentials, `dist/`, or `node_modules/` to your Git repository?
 
