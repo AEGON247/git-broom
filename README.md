@@ -49,6 +49,7 @@ npx @sachin-dev/git-broom .env
 - 📝 **Smart `.gitignore` Integration:** Locates the repository root `.gitignore`, deduplicates entries, handles trailing slashes for directories, and guarantees valid newline termination.
 - 📦 **Automated Commits:** Stages `.gitignore` alongside untracked files and generates a structured commit message automatically (customizable with `-m`).
 - 🔥 **Deep History Purge (`--purge-history` / `--scrub`):** Expunges sensitive files from every past commit across all branches using `git-filter-repo` (or `git filter-branch` fallback).
+- ↩️ **Instant Merge Reverts (`undo`):** Undo accidental merge requests directly from the terminal without opening a secondary pull request.
 - 💾 **Local File Protection on Purge:** Even during history rewrites, `git-broom` backs up your local files before purging and restores them to disk afterwards.
 - 🔍 **Dry-Run Simulation (`--dry-run`):** Inspect exact planned Git index removals, `.gitignore` entries, and commit messages before executing any mutations.
 - 🗑️ **Opt-In Hard Deletion (`--hard-delete`):** Need the file completely wiped from both Git and your filesystem? Pass `--hard-delete` with safety confirmation.
@@ -130,6 +131,23 @@ git broom .env --purge-history
 > git push origin --force-with-lease --all && git push origin --force-with-lease --tags
 > ```
 
+### 7. Revert Accidental Merge Requests (Undo)
+
+Undo the latest merge commit interactively, or provide its commit SHA directly:
+
+```bash
+git broom undo
+git broom undo <sha>
+```
+
+Add `--push` to automatically push the resulting revert commit to the current branch on `origin`:
+
+```bash
+git broom undo <sha> --push
+```
+
+Use `--dry-run` to preview changed files and the planned commit, `-m` / `--message` to override its message, and `-y` / `--yes` to bypass confirmation prompts.
+
 ---
 
 ## ⚙️ Options & Flags
@@ -139,6 +157,8 @@ git broom .env --purge-history
 | `-m, --message <msg>` | `-m` | Custom Git commit message | `chore: untrack <path> and add to .gitignore` |
 | `--no-commit` | | Stage changes in Git index without creating a commit | `false` |
 | `--purge-history` | `--scrub` | Expunge target paths from entire Git commit history across all branches | `false` |
+| `undo [commit-sha]` | `revert` | Revert a merge commit using its first parent as the mainline | |
+| `--push` | | Push the undo commit to `origin/<current-branch>` | `false` |
 | `--dry-run` | | Simulate actions and display planned changes without modifying repository | `false` |
 | `--keep-local` | | Explicitly preserve local files on disk | `true` |
 | `--hard-delete` | | Permanently delete target files from disk in addition to Git index | `false` |
@@ -153,7 +173,7 @@ git broom .env --purge-history
 `git-broom` exports fully-typed TypeScript functions for programmatic usage in custom scripts and developer toolchains:
 
 ```typescript
-import { broom, untrackPath, appendToGitIgnore } from 'git-broom';
+import { broom, undoMerge, untrackPath, appendToGitIgnore } from 'git-broom';
 
 // Run broom programmatically
 const result = await broom(['.env', 'build/'], {
@@ -164,6 +184,13 @@ const result = await broom(['.env', 'build/'], {
 
 console.log(result.commitHash);
 console.log(result.untrackedFiles);
+
+// Revert a merge commit programmatically
+const undo = await undoMerge('merge-commit-sha', {
+  message: 'chore: undo accidental merge',
+  dryRun: true,
+});
+console.log(undo.affectedFiles);
 ```
 
 ### Exported Functions
@@ -175,6 +202,7 @@ console.log(result.untrackedFiles);
 - `untrackPath(path, repoRoot)`: Remove path from Git cache (`git rm --cached -r`).
 - `appendToGitIgnore(path, repoRoot, isDirectory)`: Smart, deduplicated `.gitignore` appending.
 - `purgeHistory(paths, repoRoot, tool)`: Deep history rewrite.
+- `undoMerge(commitSha, options)`: Revert a merge commit with mainline parent 1; supports a custom message, dry-run preview, and optional push.
 - `getPurgeTool()`: Check for `git-filter-repo` or `git filter-branch`.
 
 ---

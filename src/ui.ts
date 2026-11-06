@@ -2,6 +2,7 @@ import * as p from '@clack/prompts';
 import ora, { type Ora } from 'ora';
 import pc from 'picocolors';
 import type { BroomSummary, PathTrackStatus } from './types.js';
+import type { MergeCommit } from './undo.js';
 
 export function printBanner(version = '1.0.0'): void {
   console.log();
@@ -108,6 +109,39 @@ export async function confirmAddToIgnoreUntracked(pathName: string): Promise<boo
   }
 
   return true;
+}
+
+export async function promptForMergeCommit(commits: MergeCommit[]): Promise<string | undefined> {
+  const selected = await p.select({
+    message: 'Select a merge commit to undo:',
+    options: commits.map((commit) => ({
+      value: commit.sha,
+      label: `${commit.sha.slice(0, 7)} ${commit.subject}`,
+    })),
+  });
+
+  if (p.isCancel(selected)) {
+    p.cancel('Undo cancelled.');
+    return undefined;
+  }
+
+  return selected;
+}
+
+export async function confirmUndoMerge(commitSha: string): Promise<boolean> {
+  const confirmed = await p.confirm({
+    message: `Undo merge commit ${commitSha}?`,
+    initialValue: false,
+  });
+  return !p.isCancel(confirmed) && confirmed;
+}
+
+export async function confirmUndoPush(branch: string): Promise<boolean> {
+  const confirmed = await p.confirm({
+    message: `Push the undo commit to origin/${branch}?`,
+    initialValue: false,
+  });
+  return !p.isCancel(confirmed) && confirmed;
 }
 
 export function printDryRunSimulation(params: {

@@ -3,8 +3,10 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { broom } from './broom.js';
+import { inspectMergeCommit, listRecentMergeCommits, undoMerge } from './undo.js';
 import {
   checkPathTracked,
+  execGit,
   getPurgeTool,
   getRepoRoot,
   isInsideGitRepo,
@@ -14,16 +16,24 @@ import {
   confirmAddToIgnoreUntracked,
   confirmHardDelete,
   confirmHistoryPurge,
+  confirmUndoMerge,
+  confirmUndoPush,
   createSpinner,
   printBanner,
   printDryRunSimulation,
   printSummary,
+  promptForMergeCommit,
   promptForPaths,
 } from './ui.js';
 
 const VERSION = '1.0.0';
 
 export async function runCli(argv = process.argv): Promise<void> {
+  if (argv[2] === 'undo' || argv[2] === 'revert') {
+    await runUndoCli(argv);
+    return;
+  }
+
   const program = new Command();
 
   program
@@ -125,6 +135,118 @@ export async function runCli(argv = process.argv): Promise<void> {
     } catch (err: any) {
       console.error(pc.red(`Error processing "${rawPath}": ${err.message}`));
       process.exit(1);
+    }
+  }
+
+  async function runUndoCli(argv: string[]): Promise<void> {
+    const command = new Command()
+      .name('git-broom undo')
+      .description('Undo a merge commit by creating its mainline revert commit')
+      .argument('[commitSha]', 'Merge commit SHA to undo')
+      .option('--push', 'Push the resulting revert commit to origin/<current-branch>')
+      .option('-m, --message <msg>', 'Custom revert commit message')
+      .option('--dry-run', 'Preview affected files and the planned revert commit')
+      .option('-y, --yes', 'Bypass interactive confirmation prompts')
+      .helpOption('-h, --help', 'Display help for undo');
+
+    command.action(
+      async (
+        commitSha: string | undefined,
+        options: { push?: boolean; message?: string; dryRun?: boolean; yes?: boolean }
+      ) => runUndoCommand(commitSha, options)
+    );
+    await command.parseAsync([...argv.slice(0, 2), ...argv.slice(3)]);
+  }
+
+  async function runUndoCommand(
+    requestedSha: string | undefined,
+    options: { push?: boolean; message?: string; dryRun?: boolean; yes?: boolean }
+  ): Promise<void> {
+    let spinner: ReturnType<typeof createSpinner> | undefined;
+
+    try {
+      const isGit = await isInsideGitRepo();
+      if (!isGit) {
+        throw new Error('Current directory is not a Git repository (or any parent directory).');
+      }
+      const repoRoot = await getRepoRoot();
+
+      let commitSha = requestedSha;
+      if (!commitSha) {
+        if (!process.stdin.isTTY) {
+          throw new Error('No merge commit specified. Pass a commit SHA in non-interactive terminals.');
+        }
+        const commits = await listRecentMergeCommits(repoRoot);
+        if (commits.length === 0) {
+          throw new Error('No merge commits were found in this repository.');
+        }
+        commitSha = await promptForMergeCommit(commits);
+        if (!commitSha) return;
+      }
+
+      const inspected = await inspectMergeCommit(commitSha, repoRoot);
+      if (options.dryRun) {
+        const result = await undoMerge(commitSha, {
+          message: options.message,
+          push: options.push,
+          dryRun: true,
+          cwd: repoRoot,
+        });
+        console.log(pc.bold(pc.magenta('DRY-RUN MODE: No changes will be applied to your repository.')));
+        console.log(pc.bold('Repository Root: ') + pc.dim(result.repoRoot));
+        console.log(pc.bold('Merge Commit: ') + pc.cyan(`${result.shortSha} (${inspected.parents.length} parents)`));
+        console.log(pc.bold('Mainline Parent: ') + pc.cyan('1'));
+        console.log(pc.bold('Affected Files:'));
+        if (result.affectedFiles.length === 0) {
+          console.log(pc.dim('  No files changed relative to the first parent.'));
+        } else {
+          for (const file of result.affectedFiles) console.log(`  • ${pc.cyan(file)}`);
+        }
+        console.log(pc.bold('Planned Commit: ') + pc.cyan(`"${result.commitMessage}"`));
+        if (options.push) {
+          console.log(pc.bold('Planned Push: ') + pc.cyan(`origin/${result.branch}`));
+        }
+        return;
+      }
+
+      if (!options.yes) {
+        if (!process.stdin.isTTY) {
+          throw new Error('Undo requires interactive confirmation or the -y/--yes flag.');
+        }
+        if (!(await confirmUndoMerge(inspected.shortSha))) {
+          console.log(pc.yellow('Undo cancelled.'));
+          return;
+        }
+      }
+
+      let shouldPush = Boolean(options.push);
+      if (!shouldPush && !options.yes && process.stdin.isTTY) {
+        const branchRes = await execGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot);
+        if (branchRes.exitCode !== 0) {
+          throw new Error(`Unable to determine the current branch: ${branchRes.stderr || branchRes.stdout}`);
+        }
+        shouldPush = await confirmUndoPush(branchRes.stdout.trim());
+      }
+
+      spinner = createSpinner(`Undoing merge commit ${inspected.shortSha}...`).start();
+      const result = await undoMerge(commitSha, {
+        message: options.message,
+        push: shouldPush,
+        cwd: repoRoot,
+      });
+      spinner.succeed(pc.green(`Merge commit ${result.shortSha} successfully undone.`));
+      console.log();
+      console.log(pc.bold('Undo Summary:'));
+      console.log(`  • Revert Commit: ${pc.cyan(result.shortSha)}`);
+      console.log(`  • Branch: ${pc.cyan(result.branch)}`);
+      console.log(`  • Message: ${pc.dim(result.commitMessage)}`);
+      console.log(`  • Affected Files: ${pc.cyan(result.affectedFiles.length.toString())}`);
+      if (result.pushed) console.log(`  • Pushed: ${pc.green(`origin/${result.branch}`)}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (spinner) spinner.fail(pc.red(`Undo failed: ${message}`));
+      else console.error(pc.red(`Undo failed: ${message}`));
+      process.exitCode = 1;
     }
   }
 

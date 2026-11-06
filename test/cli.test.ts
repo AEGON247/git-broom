@@ -126,4 +126,51 @@ describe('CLI interface tests', () => {
     expect(diffOut).toContain('debug.log');
     expect(diffOut).toContain('.gitignore');
   });
+
+  it('previews undo without changing a merge commit repository', async () => {
+    await fs.promises.writeFile(path.join(tmpRepo, 'base.txt'), 'base\n', 'utf8');
+    await execFileAsync('git', ['add', '.'], { cwd: tmpRepo });
+    await execFileAsync('git', ['commit', '-m', 'initial'], { cwd: tmpRepo });
+    await execFileAsync('git', ['branch', '-M', 'main'], { cwd: tmpRepo });
+    await execFileAsync('git', ['switch', '-c', 'feature'], { cwd: tmpRepo });
+    await fs.promises.writeFile(path.join(tmpRepo, 'merged.txt'), 'feature\n', 'utf8');
+    await execFileAsync('git', ['add', '.'], { cwd: tmpRepo });
+    await execFileAsync('git', ['commit', '-m', 'feature change'], { cwd: tmpRepo });
+    await execFileAsync('git', ['switch', 'main'], { cwd: tmpRepo });
+    await fs.promises.writeFile(path.join(tmpRepo, 'main.txt'), 'main\n', 'utf8');
+    await execFileAsync('git', ['add', '.'], { cwd: tmpRepo });
+    await execFileAsync('git', ['commit', '-m', 'main change'], { cwd: tmpRepo });
+    await execFileAsync('git', ['merge', '--no-ff', 'feature', '-m', 'merge feature'], {
+      cwd: tmpRepo,
+    });
+    const mergeSha = (
+      await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: tmpRepo })
+    ).stdout.trim();
+
+    const { stdout } = await execFileAsync(
+      'node',
+      [cliPath, 'undo', mergeSha, '--dry-run'],
+      { cwd: tmpRepo }
+    );
+
+    const plainOutput = stdout.replace(/\u001b\[[0-9;]*m/g, '');
+    expect(plainOutput).toContain('DRY-RUN MODE');
+    expect(plainOutput).toContain('Mainline Parent: 1');
+    expect(plainOutput).toContain('merged.txt');
+    expect(plainOutput).toContain('[PR/MR revert]');
+    expect(
+      (await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: tmpRepo })).stdout.trim()
+    ).toBe(mergeSha);
+
+    const { stdout: undoOutput } = await execFileAsync(
+      'node',
+      [cliPath, 'undo', mergeSha, '-m', 'chore: undo via CLI', '-y'],
+      { cwd: tmpRepo }
+    );
+    expect(undoOutput).toContain('Undo Summary');
+    expect(fs.existsSync(path.join(tmpRepo, 'merged.txt'))).toBe(false);
+    expect(
+      (await execFileAsync('git', ['log', '-1', '--pretty=%B'], { cwd: tmpRepo })).stdout.trim()
+    ).toBe('chore: undo via CLI');
+  });
 });
