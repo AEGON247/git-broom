@@ -8,3 +8,4 @@ Thumbs.db
 tsup.config.ts
 package.json
 package-lock.json
+*.tgz
